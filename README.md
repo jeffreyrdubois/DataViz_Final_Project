@@ -21,7 +21,7 @@ The intend of this project is to explore the operating efficiencies of credit un
 The intend of this project is to explore spaital analytics as it pertains to Credit Union Branches as well as experiment in interactive plots for asset growth. This project also includes a regression for branch site selection.
 
 <p><b>Sample VisualizationL</b> Map of Credit Union Branches</p>
-<img src="https://github.com/jeffreyrdubois/dataviz_final_project/blob/main/Figures/Branch_Map.png" width=75%>
+<img src="https://github.com/jeffreyrdubois/dataviz_final_project/blob/main/figures/Branch_Map.png" width=75%>
 
 
 
