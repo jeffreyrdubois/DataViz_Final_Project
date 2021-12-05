@@ -1,0 +1,337 @@
+---
+title: "Data Visualization - Mini-Project 1"
+author: "Jeffrey DuBois `jeffreydubois0258@floridapoly.edu`"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r, warning=FALSE}
+library(tidyverse)
+ncua_df <- read.csv("../data/NCUA_Data.csv") #This is the actual dataset (pre-merged)
+```
+
+# Introduction
+
+For this project I will be reviewing data from the National Credit Union Association (NCUA). The dataset can be found [Here](https://www.ncua.gov/analysis/credit-union-corporate-call-report-data/quarterly-data). This dataset is gathered quarterly and includes fields pertaining to the lending and deposit portfolio for every credit union in the country as well as metrics for income, expenses and various other factors. I plan to use a series of Scatter Plots, column charts and box plots to showcase the efficiency of Credit Unions of varying sizes. I will be utilizing June 2021 data which is the most recent quarter available as of the date of this paper.
+
+# Data Wrangling
+
+```{r, warning=FALSE}
+dim(ncua_df)
+```
+
+This dataset contains 2,324 metrics on 5,136 credit unions throughout the United States. For this paper I will only be analyzing around 10 of these metrics, but the processes used in this paper could be replaced for any combination of the rest of the metrics.
+
+```{r, warning=FALSE}
+names(ncua_df)[50:55]
+```
+
+The subset of column names above highlights one problem with this dataset. Almost all the attributes are named after their account number on the NCUA 5300 Call Report. These numbers are essentially meaningless and would require the user to memorize the fields they are interested in and with over 2,000 columns this can be a lofty task. Luckily the NCUA provides a file which provides names and descriptions for every account number. Below I will import this dataset.
+
+```{r, warning=FALSE}
+acctnames <- read.csv("../data/AcctDesc.csv") #This file contains descriptions for each column which will be easier to use
+head(acctnames[,1:2])
+```
+
+Before I do any analysis I want to update the column namesof the main data frame to be more useful.
+
+```{r, warning=FALSE}
+temp_df <- ncua_df
+
+names(temp_df)<-acctnames$AcctName[match(toupper(names(ncua_df)), toupper(acctnames$Account))]
+
+names(temp_df)[is.na(names(temp_df))]<-names(ncua_df)[is.na(names(temp_df))]
+
+ncua_df <- temp_df
+
+rm(temp_df)
+```
+
+The code above will replace the Account Numbers with names.
+
+ 
+```{r, warning=FALSE}
+names(ncua_df)[50:55]
+```
+We can see the same columns which were previously tested now have names instead of account numbers, this will make further analysis much easier.
+
+
+# Data Summary by State
+
+With the data wrangling out of the way we can summarize the data to get a better idea of what the file contains.
+
+
+```{r, warning=FALSE}
+state_group <- ncua_df %>% 
+  group_by(STATE,) %>% 
+  summarize(n = n()) %>%
+  arrange(desc(n))
+
+state_group
+```
+
+The table above shows there are Credit Unions in 54 "States" (The additional 4 states are DC, Guam, Puerto Rico and the Virgin Islands) and Texas is the most common state for Credit Unions.
+
+```{r fig.align="center", fig.width = 15,fig.height=4, warning=FALSE}
+ggplot(state_group, aes(x=STATE, y=n, fill=n))+
+  geom_col()+
+  labs(title="Credit Unions by State", caption = "NCUA 5300 Report (June 2021)", x="", y="")+
+  guides(fill = FALSE)+
+  theme_minimal()+
+  theme(plot.title.position = "plot")
+```
+
+Now the graph above makes some intuitive sense, the states known to have higher populations (California, Texas, New York, etc.) have more credit unions.
+
+The plot above is a visualization of the data in the previous table. It may appear like a minor alterations but great care was taken to replicate what was presented by William Chase on the topic of "Glamour of Graphics" at the RStudio Conference of 2020 ([Chase, 2020](https://www.rstudio.com/resources/rstudioconf-2020/the-glamour-of-graphics/)). A few of the manual alterations which were included in the graph above are as follows:
+
+<ul>Title Left-Aligned to Plot</ul>
+<ul>Unnecessary Axis Labels Removed</ul>
+<ul>Unnecessary Legends Removed</ul>
+<ul>Color was used to reinforce the scale of larger states</ul>
+<ul>A Caption was added to credit the source of the data</ul>
+<ul>Background changed to white</ul>
+
+Many of these alterations were matters of personal taste but as I like this style, these alterations will be continued through the remainder of this paper.
+
+```{r, warning=FALSE}
+state_group_assets <- ncua_df %>% 
+  group_by(STATE,) %>% 
+  summarize(n = n(), assets = sum(`TOTAL ASSETS`)) %>%
+  arrange(desc(n))
+
+state_group_assets
+```
+
+```{r fig.align="center",fig.width = 14,fig.height=4, warning=FALSE}
+ggplot(state_group_assets, aes(x=STATE, y=assets/n, fill=assets/n))+
+  geom_col()+
+  labs(title="Average Assets of Credit Unions by State", caption = "NCUA 5300 Report (June 2021)", x="", y="")+
+  guides(fill = FALSE)+
+  theme_minimal()+
+  theme(plot.title.position = "plot")+
+  scale_y_continuous(labels = scales::dollar)
+```
+
+As a continuation of the previous plot, the plot above was used to normalize each state's credit union asset size by the number of credit unions in each state,
+
+This plot shows us Virginia's Credit Unions, on average, have a larger asset size than other states, but I have a suspicion that this is due to Navy Federal Credit Union. Navy Federal is the largest credit union in the nation and is likely skewing the results.
+
+We need to view this data as a box and whisker plot to get a better idea of the distribution of asset size of credit unions by state.
+
+```{r fig.align="center",fig.width = 14,fig.height=4, warning=FALSE}
+ggplot(ncua_df, aes(x=factor(STATE), y=`TOTAL ASSETS`/1000000000))+
+  geom_boxplot()+
+  labs(title="Assets of Credit Unions by State", caption = "NCUA 5300 Report (June 2021)", x="", y="Assets ($ Billions)")+
+  guides(fill = FALSE)+
+  theme_minimal()+
+  theme(plot.title.position = "plot")+
+  scale_y_continuous(labels = scales::dollar)
+```
+
+The plot above shows us the scale of Navy Federal Credit Union, they have almost $150 Billion in Assets!
+
+To make the plot more useful we could try viewing it in a logarithmic scale.
+```{r fig.align="center",fig.width = 14,fig.height=4, warning=FALSE}
+ggplot(ncua_df, aes(x=factor(STATE), y=`TOTAL ASSETS`))+
+  geom_boxplot()+
+  labs(title="Assets of Credit Unions by State", caption = "NCUA 5300 Report (June 2021)", x="", y="")+
+  theme_minimal()+
+  theme(plot.title.position = "plot")+
+  scale_y_log10(labels = scales::dollar)
+```
+
+Before moving on from this plot I would like to add a horizontal line for the national median to get a better idea for each state's difference.
+
+```{r fig.align="center",fig.width = 14,fig.height=4, warning=FALSE}
+national_med_asset <- median(ncua_df$`TOTAL ASSETS`)
+
+ggplot(ncua_df, aes(x=factor(STATE), y=`TOTAL ASSETS`))+
+  geom_boxplot()+
+  geom_line(aes(x=factor(STATE), y=national_med_asset), color="BLACK")+
+  labs(title="Assets of Credit Unions by State", subtitle="National Median Marked", caption = "NCUA 5300 Report (June 2021)", x="", y="")+
+  theme_minimal()+
+  theme(plot.title.position = "plot")+
+  scale_y_log10(labels = scales::dollar)+
+  geom_hline(yintercept = national_med_asset, color="Red", size=1)
+```
+
+In the plot above I chose to note that the horiontal line is the National Median as a subtitle rather than as a legend key. I believe this is a more appealing way to inform the reader than a legend.
+
+The plot above can be easily replicated for any other metric, such as deposits and loans:
+```{r fig.align="center",fig.width = 14,fig.height=4, warning=FALSE}
+national_med_dep <- median(ncua_df$`Total Amount of Shares and Deposits`)
+
+ggplot(ncua_df, aes(x=factor(STATE), y=`Total Amount of Shares and Deposits`))+
+  geom_boxplot()+
+  geom_line(aes(x=factor(STATE), y=national_med_dep), color="BLACK")+
+  labs(title="Deposits of Credit Unions by State", subtitle="National Median Marked", caption = "NCUA 5300 Report (June 2021)", x="", y="")+
+  guides(fill = FALSE)+
+  theme_minimal()+
+  theme(plot.title.position = "plot")+
+  scale_y_log10(labels = scales::dollar)+
+  geom_hline(yintercept = national_med_dep, color="Red", size=1)
+```
+
+```{r fig.align="center",fig.width = 14,fig.height=4, warning=FALSE}
+national_med_loan <- median(ncua_df$`Total amount of Loans and Leases`)
+
+ggplot(ncua_df, aes(x=factor(STATE), y=`Total amount of Loans and Leases`))+
+  geom_boxplot()+
+  geom_line(aes(x=factor(STATE), y=national_med_loan), color="BLACK")+
+  labs(title="Loans of Credit Unions by State", subtitle="National Median Marked", caption = "NCUA 5300 Report (June 2021)", x="", y="")+
+  guides(fill = FALSE)+
+  theme_minimal()+
+  theme(plot.title.position = "plot")+
+  scale_y_log10(labels = scales::dollar)+
+  geom_hline(yintercept = national_med_loan, color="Red", size=1)
+```
+
+The plots above are quite similar to the asset plot and this is to be expected, Credit Unions all have a similar principle, they take in members' deposits to use as funding for loans to other members.
+
+This reminds me of a scene from my favorite movie, <i>It's a Wonderful Life</i>.
+
+<center>
+![It's a Wonderful Life (1946)](https://i.imgflip.com/5ntq0l.jpg){width=50%}
+</center>
+
+
+# Use of Shares in Lending
+
+To better show the relationship between deposits and loans we can do a scatterplot.
+
+```{r, warning=FALSE}
+ggplot(ncua_df, aes(x=`Total Amount of Shares and Deposits`, y=`Total amount of Loans and Leases`))+
+  geom_point(size = 0.5, color = "Blue")+
+  geom_smooth(method=lm, color = "Black")+
+  geom_abline(slope = 1, intercept = 0, color="Red")+
+  labs(title="Relationship of Deposits to Loans", caption = "NCUA 5300 Report (June 2021)", x="Deposits", y="Loans")+
+  theme_minimal()+
+  theme(plot.title.position = "plot")+
+  scale_y_log10(labels = scales::dollar)+
+  scale_x_log10(labels = scales::dollar)
+```
+
+We can see in the plot above that almost all the deposits a credit union has is being actively used in Loans. This metric is also referred to as the Loan to Share ratio in industry.
+
+It would be worth while to explore this ratio in greater detail.
+
+```{r, warning=FALSE}
+sum(ncua_df$`Total amount of Loans and Leases`)/sum(ncua_df$`Total Amount of Shares and Deposits`)
+```
+
+As a total for the nation, 69.5% of all Credit Union Deposits are currently being used in loans, but the plot above also showed that this ratio increased with total deposit amount which I further want to explore.
+
+```{r, warning=FALSE}
+ggplot(ncua_df, aes(x=`Total Amount of Shares and Deposits`, y=`Total amount of Loans and Leases`/`Total Amount of Shares and Deposits`))+
+  geom_point(size = 0.5, color = "Blue")+
+  geom_smooth(method=lm, color = "Black")+
+  geom_hline(yintercept = 1, color="Red")+
+  labs(title="Relationship of Deposits to Loans", caption = "NCUA 5300 Report (June 2021)", x="Deposits", y="Loan to Share Ratio")+
+  theme_minimal()+
+  theme(plot.title.position = "plot")+
+  scale_y_continuous(labels = scales::percent)+
+  scale_x_log10(labels = scales::dollar)+
+  coord_cartesian(ylim = c(0,1))
+```
+
+The plot above again shows the increasing trend of percent of shares currently on Loan as a Credit Union's total deposits increases. This makes some sense as a Credit Union's cost to operate on a per deposit basis should decrease as the credit union increases in size. This hints at the idea that larger credit unions can afford to have more of their member's deposits being locked into loans rather than sitting at the credit union being used for operations.
+
+Further, I would like to comment upon the fact that Coord_Cartesian was used to zoom into a subset of the plot, but no credit unions were filtered out. This was intentional. While seeing Credit Unions >100% LTS is not necessary for the conclusion I was attempting to draw, their addition in the trend line was useful in giving an overall picture.
+
+# Operating Expenses per Dollar of Deposit
+
+In an attempt to show the increased operating efficiency of credit unions with increased deposits I decided to take a look at Non-Interest Expenses. These would be expenses such as Employee Compensation, Office Occupancy Expenses and Promotional Expenses. Essentially these would be expenses not paid to the members in the form of dividends and instead serve to allow the operation of the credit union.
+
+As a quick graph, lets see what the makeup of Non-Interest Expenses are nationally
+
+```{r, warning=FALSE}
+expenses <- ncua_df %>%
+  select (`Employee Compensation and Benefits`,`Office Occupancy Expense`,`Office Operations Expense`,`Educational and Promotional Expense`,`Loan Servicing Expense`,`Professional and Outside Services`,`Miscellaneous Operating Expenses`) %>%
+  colSums() %>%
+  data.frame()
+
+names(expenses)<-"YTD Amount"
+expenses$Category <- row.names(expenses)
+row.names(expenses) <- NULL
+
+expenses<-arrange(expenses,desc(`YTD Amount`))
+
+total <- sum(expenses$`YTD Amount`)
+
+ggplot(data = expenses, aes(x="", y=`YTD Amount`, fill=Category))+
+  geom_bar(stat="identity", width=1) +
+  coord_polar("y", start=0)+
+  theme_void()+
+  geom_text(aes(label = paste0(round(`YTD Amount`/total,2)*100, "%")), position = position_stack(vjust=0.5)) +
+  labs(x = NULL, y = NULL, fill = NULL)
+
+```
+
+We can see Employee Compensation and Benefits make up the majority of non-interest expenses for Credit Unions Nationally, with Office Operations Expenses coming in second.
+
+I am surprised that office operations is higher than office occupancy.
+
+With the concept of Non-Interest Expenses established, we can now look at efficiency.
+
+There are a few ways of measuring efficiency one more of which I will use later, but to start I want to see efficiency from a member's point of view. As previously mentioned I did this by comparing a credit unions total deposits to their non-interest expenses.
+
+```{r, warning=FALSE}
+ggplot(ncua_df, aes(x=`Total Amount of Shares and Deposits`, y=`Total Non-Interest Expense`))+
+  geom_point(size = 0.5, color = "Blue")+
+  geom_smooth(method=lm, color = "Black")+
+  labs(title="Relationship of Non-Interest Expenses to Deposits", caption = "NCUA 5300 Report (June 2021)", x="Deposits", y="Non-Interest Expenses YTD")+
+  theme_minimal()+
+  theme(plot.title.position = "plot")+
+  scale_y_log10(labels = scales::dollar)+
+  scale_x_log10(labels = scales::dollar)
+```
+
+The graph above allows us to see a few outliers which have <$100,000 in deposits. So for the next graph I have removed these.
+
+```{r, warning=FALSE}
+ggplot(filter(ncua_df,`Total Amount of Shares and Deposits`>100000), aes(x=`Total Amount of Shares and Deposits`, y=`Total Non-Interest Expense`/`Total Amount of Shares and Deposits`))+
+  geom_point(size = 0.5, color = "Blue")+
+  geom_smooth(method=lm, color = "Black")+
+  labs(title="Relationship of Non-Interest Expenses to Deposits", caption = "NCUA 5300 Report (June 2021)", x="Deposits", y="Operating Expenses per Dollar of Deposit")+
+  guides(fill = FALSE)+
+  theme_minimal()+
+  theme(plot.title.position = "plot")+
+  scale_y_continuous(labels = scales::dollar)+
+  scale_x_log10(labels = scales::dollar)+
+  coord_cartesian(ylim = c(0,0.05))
+```
+
+The graph above shows what I had expected. As a Credit Union's total deposits increases their non-interest income as a factor of total deposits decreases. This suggests that larger credit unions tend to be more efficient.
+
+
+# Efficiency Ratio
+
+The NCUA uses the formula of Non Interest Expense / Gross Income to calculate an efficiency ratio. So we can replicate the process above to see if the previous findings remain true for this method as well.
+
+```{r, warning=FALSE}
+ggplot(filter(ncua_df,`Total Amount of Shares and Deposits`>100000), aes(x=`Total Amount of Shares and Deposits`, y=`Total Non-Interest Expense`/(`Total Interest Income`+`Fee Income`+`Other Operating Income (Includes unconsolidated CUSO Income)`)))+
+  geom_point(aes(color="Other"), size = 0.5)+
+  geom_point(data = filter(ncua_df,`Total Amount of Shares and Deposits`>100000, STATE=="FL"), aes(color=STATE), size = 2)+
+  geom_smooth(aes(color="Other"), method=lm)+
+  geom_smooth(data = filter(ncua_df,`Total Amount of Shares and Deposits`>100000, STATE=="FL"), aes(color=STATE), method=lm)+
+  labs(title="Efficiency Ratio and Deposits", caption = "NCUA 5300 Report (June 2021)", x="Deposits", y="Efficiency Ratio")+
+  theme_minimal()+
+  theme(plot.title.position = "plot")+
+  scale_y_continuous(labels = scales::percent)+
+  scale_x_log10(labels = scales::dollar)+
+  coord_cartesian(ylim = c(0,1.5))+
+  labs(colour = "State")+
+  theme(legend.position = c(0.9, 0.9))
+```
+
+The plot above confirms the conclusion I made, that larger credit unions are more efficient. For additional information I shaded Florida Credit Unions differently, with a separate trend line. This additional piece of information tells us that Florida Credit Unions are less efficient at the same deposit level than the national average.
+
+I also experimented by moving the legend inside the plot which saves space as that area of the plot was void of data. This improves the ink to information ratio of the plot.
+
+# Conclusion
+
+It was found using two different methodologies that credit unions of larger size, as measured in deposits, tend to be more efficient. I was also able to experiment with some ideas shared by William Chase in his "Glamour of Graphics" presentation and I do agree with what he shared. These graphs have been more visually appealing than what I have produced in prior projects. In the future I want to explore deeper into operating efficiencies, now that we can conclude larger credit unions are more efficient, I can now go on to see exactly how this is done. Such as plots pertaining to "per Employee" income levels.
+
+

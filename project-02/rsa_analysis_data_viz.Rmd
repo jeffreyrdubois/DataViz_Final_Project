@@ -1,0 +1,350 @@
+---
+title: "Mini-Project 2"
+author: "Jeffrey DuBois"
+date: "11/07/2021"
+output:
+  html_document:
+    df_print: paged
+---
+
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(plotly)
+library(readr)
+library(ggmap)
+library(sf)
+library(DBI)
+library(dplyr)
+library(dbplyr)
+library(odbc)
+library(maps)
+library(ggrepel)
+library(gridExtra)
+library(jtools)
+```
+ 
+# Database Connection
+
+For the purpose of this mini-project I decided to utilize an Azure database rather than include data files, my final project next semester will heavily rely upon connected Azure databases in order to remain updated so this project gave me a good opportunity to practice with this.
+
+The code below creates a Database Connection object which we will be querying throughout this project. You will notice the password here is visible, I am not sure if there is a way around this but for our purposes it doesn't matter as the user login below is for a read only user so no harm will come of my database if someone decides to connect for their own purposes.
+```{r}
+# Azure Database Connection
+con <- DBI::dbConnect(odbc::odbc(), 
+                      Driver = "SQL Server", 
+                      Server = "ncua-dubois.database.windows.net", 
+                      Database = "ncua", 
+                      uid="readonlylogin",
+                      pwd="DBpassword!")
+```
+
+### Test Query
+
+As a quick test to ensure the database connection is working the query below will select all credit unions in Florida, along with their most recent asset size, and store the result in the "testQuery" variable.
+```{sql, connection=con, output.var = "testQuery"}
+
+select icu.CU_NAME as 'CreditUnion', fs.ACCT_010 as 'Assets'
+from tbl_Foicu icu
+inner join tbl_Fs220 fs on (icu.CU_NUMBER = fs.CU_NUMBER and icu.CYCLE_DATE = fs.CYCLE_DATE)
+where 1=1
+and icu.CYCLE_DATE = (select max(CYCLE_DATE) from tbl_Foicu)
+and icu.STATE='FL'
+order by icu.CU_NAME asc
+```
+
+We can see from the head() command below that the query did work successfully.
+```{r}
+head(testQuery)
+```
+
+# Branch Locations
+
+For the Spatial Analysis portion of this project, the most logical topic to look at is where branches are located, the query below pulls in the locations of all Credit Union branches in the continental US as of the end of every quarter from December 2019 to June 2021. The purpose of this was to look at Covid's effect on Credit Union Branches, which we will look into deeper later.
+```{sql, connection=con, output.var = "cu_branches"}
+select cast(CYCLE_DATE as date) as Date, CU_NAME, Lat as y, Long as x, PhysicalAddressStateCode as State
+from tbl_BranchLocations
+where 1=1
+and PhysicalAddressStateCode not in ('PR','VI','GU','HI','AK')
+```
+
+We can see below that the Branches have already been Geocoded, this was a step I completed outside of R as there are 23,161 unique addresses in this database which would far overwhelm R's geocoding abilities.
+```{r}
+head(cu_branches)
+```
+
+Now that we have the data we need to format it to be plot-able on a map, this is done using the code below.
+```{r}
+state_map_data <- map('state', fill = TRUE, plot = FALSE) %>% st_as_sf() #Generates a map of the Continental United States
+
+cu_branches_21_sf <- st_as_sf(filter(cu_branches,Date=='2021-06-30'), coords = c('x','y')) #Creates SF object from our branch location query results filtering to only include the most recent results
+cu_branches_21_sf <- st_set_crs(cu_branches_21_sf, st_crs(state_map_data)) #Converts our branch SF object to use the same cooridnates reference system as the US Map
+
+```
+
+The ggplot below shows the locations of every Credit Union Branch in relation to the United States.
+```{r}
+ggplot() +
+  geom_sf(data = state_map_data)+
+  geom_sf(data = cu_branches_21_sf, color = 'blue', size = 0.1)+
+  labs(title="Credit Union Branches", subtitle="Continental US Only", caption="Source: NCUA (June 2021)")+
+  theme(plot.title.position = "plot")
+```
+
+### Branch Locations by State
+
+After seeing the map above my initial objective was to get a total count by state, originally I was going to achieve this by doing a simple group_by, and this is why we can see the query includes a column for the branch state. But I changed my mind on this and decided to have R calculate this using the st_intersects function.
+
+The function below calculates the number of points inside each state in the previous map and stores the result in the branch_count attribute in the state sf object.
+```{r, warning=FALSE, message=FALSE}
+sf::sf_use_s2(FALSE)
+state_map_data$branch_count <- lengths(st_intersects(state_map_data,cu_branches_21_sf))
+```
+
+The plot below using that branch_count attribute to color each state. I originally has plotted the branches on top of this map, similar to the previous map but it felt redundant and cluttered the map.
+We can see that Texas and California have the most Credit Union Branches which makes sense based on their populations. Perhaps in a future project I will normalize these results by population.
+```{r}
+ggplot() +
+  geom_sf(data = state_map_data, aes(fill = branch_count))+
+  scale_fill_distiller(palette="Greens", direction = +1)+
+  #geom_sf(data = cu_branches_21_sf, color = 'black', size = 0.00005)+
+  labs(title="Number of Credit Union Branches by State", subtitle="Continental US Only", caption="Source: NCUA (June 2021)",fill='Credit Union Branches')+
+  theme(plot.title.position = "plot",legend.position = "bottom")
+  
+```
+
+### COVID's Effect on Branches
+
+As a quick side question I wanted to see how many branches existed prior to COVID compared to now so I graphed the results as a line graph over time below. We can see there was a small dip in the first quarter of 2020 but the number of branches has remained relatively stable. Keep in mind to show the variance I had to play with the Y axis a bit. Less than 2% of branches closed in the first quarter of 2020.
+```{r, warning=FALSE, message=FALSE}
+date_branch_counts <- cu_branches %>%
+  group_by(Date) %>%
+  summarise(count_branches = n())
+```
+
+```{r}
+ggplot(date_branch_counts, aes(x=Date, y=count_branches, group=1))+
+  geom_point()+
+  geom_line()+
+  ylim(20000,22000)+
+  theme_minimal()+
+  labs(title="Number of CU Branchs", subtitle="Continental US Only", caption="Source: NCUA", y="Count of Branches",x="")+
+  theme(plot.title.position = "plot")
+```
+
+### Branch Changes in Florida
+
+As a final mapping analysis question for this project I wanted to see the change in Credit Union Branch locations in Florida between December 31st, 2019 and June 30th, 2021. The query below pulls the differences between these two dates and labels if the branch closed, opened or remained existing throughout this time period.
+```{sql, connection=con, output.var = "florida_br_change"}
+select cast(c.CYCLE_DATE as date) as Date, c.CU_NAME, c.Lat as y, c.Long as x, c.PhysicalAddressStateCode as State,
+case when p.SiteId is null then 'New' else 'Existing' end as 'Status'
+from tbl_BranchLocations c
+left outer join tbl_BranchLocations p on (c.CU_NUMBER = p.CU_NUMBER and c.SiteId = p.SiteId and p.CYCLE_DATE='2019-12-31')
+where 1=1
+and c.PhysicalAddressStateCode in ('FL')
+and c.CYCLE_DATE in ('2021-06-30')
+
+Union
+
+select cast(c.CYCLE_DATE as date) as Date, c.CU_NAME, c.Lat as y, c.Long as x, c.PhysicalAddressStateCode as State,
+case when p.SiteId is null then 'Closed' else 'Existing' end as 'Status'
+from tbl_BranchLocations c
+left outer join tbl_BranchLocations p on (c.CU_NUMBER = p.CU_NUMBER and c.SiteId = p.SiteId and p.CYCLE_DATE='2021-06-30')
+where 1=1
+and c.PhysicalAddressStateCode in ('FL')
+and c.CYCLE_DATE in ('2019-12-31')
+
+order by 2,3,4,1
+```
+
+The code below generates two maps, one for which branches closed and one for which branches opened. I decided to map these seperately do they do not overlap and hide any information.
+```{r}
+new_map <- ggplot()+
+  geom_sf(data = filter(state_map_data,ID=="florida")) +
+  geom_point(data = filter(florida_br_change,Date=='2021-06-30',State=="FL",Status=="Existing"), aes(x = x, y = y), color="Dark Grey", size = 0.1)+
+  geom_point(data = filter(florida_br_change,Date=='2021-06-30',State=="FL",Status=="New"), aes(x = x, y = y), color="Dark Green", size = 2)+
+  theme_minimal()+
+  theme(legend.position="bottom", legend.key.width = unit(1, 'cm'))+
+  labs(title=" ", subtitle="Opened Between December 2019 and June 2021",y="",x="",caption="Source: NCUA")+
+  theme(plot.title.position = "plot")+
+  theme(axis.text.y = element_text(color = "white"))
+
+old_map <- ggplot()+
+  geom_sf(data = filter(state_map_data,ID=="florida")) +
+  geom_point(data = filter(florida_br_change,Date=='2019-12-31',State=="FL",Status=="Existing"), aes(x = x, y = y), color="Dark Grey", size = 0.1)+
+  geom_point(data = filter(florida_br_change,Date=='2019-12-31',State=="FL",Status=="Closed"), aes(x = x, y = y), color="Dark Red", size = 2)+
+  theme_minimal()+
+  theme(legend.position="bottom", legend.key.width = unit(1, 'cm'))+
+  labs(title="Recent Credit Union Branch Openings and Closings", subtitle="Closed Between December 2019 and June 2021",y="",x="",caption=" ")+
+  theme(plot.title.position = "plot")
+  
+```
+
+The plot below shows the two maps, with the left map showing all credit union branches which closed between these dates and the right map showing all credit union branches which opened.
+I found these results very interesting, although it doesn't paint a clear picture, branches are both closing and opening at roughly the same rate. I did notice though, that the Southwest Florida market (the Sarasota, Bradenton, and Port Charlotte areas) has seen 4 openings and no closings. I have known about the potential in this area for a while, so to see this being taken advantage of is encouraging.
+```{r, fig.width=15}
+grid.arrange(old_map, new_map, ncol=2)
+```
+
+# Interactive Plot
+
+### Asset Trend of Top Credit Unions
+
+For the Interactive plot portion of this Mini-Project I decided to look into the Asset Trends of the top 10 Credit Unions in Florida. I know from past projects that the top 10 Credit Unions are Addition Financial, Campus USA, Eglin, Fairwinds, Grow Financial, GTE, Midflorida, Space Coast, Suncoast, and Vystar.
+
+```{sql, connection=con, output.var = "top_ten_assets"}
+select icu.CU_NAME as 'CreditUnion'
+, cast(fs.ACCT_010 as money) as 'Assets'
+, (fs.ACCT_010-st.ACCT_010+0.0)/st.ACCT_010 as 'AssetGrowth'
+, cast(fs.CYCLE_DATE as datetime) as 'Cycle_Date'
+from tbl_Foicu icu
+inner join tbl_Fs220 fs on (icu.CU_NUMBER = fs.CU_NUMBER and icu.CYCLE_DATE = fs.CYCLE_DATE)
+left outer join tbl_Fs220 st on (icu.CU_NUMBER = st.CU_NUMBER and st.CYCLE_DATE='2019-12-31')
+where 1=1
+and icu.STATE='FL'
+and icu.cu_number in (68645,68490,67297,68600,68417,9976,196,9788,68391,68702)
+order by icu.CU_NAME asc, fs.CYCLE_DATE desc
+```
+
+```{r}
+top_ten_assets$Cycle_Date <- as.Date(top_ten_assets$Cycle_Date)
+```
+
+```{r}
+asset_trend <- ggplot(data = top_ten_assets)+
+  geom_line(aes(x = Cycle_Date, y = Assets/1000000000, color=CreditUnion), size=1)+
+  geom_line(aes(x = Cycle_Date, y = Assets/1000000000, color=CreditUnion, text=paste("Credit Union: ",CreditUnion,"<br>Date:",Cycle_Date,"<br>Assets: $", format(Assets,big.mark=","))), size=1)+
+  scale_y_continuous(labels=scales::dollar_format(),limits = c(0,15),breaks = seq(0, 15, by = 1))+
+  scale_x_date(date_breaks = "2 month", date_labels =  "%b %y")+
+  labs(y="Assets ($ Billions)",x="Cycle Date",caption=" ", color="Credit Union",title=" ")+
+  theme(plot.title.position = "plot")
+```
+
+The graph below shows usthe trend for these top ten Florida Credit Unions, and by utilizing ggplot and a custom tooltip we can highlight over each line and see more details.
+
+```{r}
+asset_plotly <- ggplotly(asset_trend, tooltip = "text", width = 1000) %>%
+  layout(title = list(text = paste0('Asset Trend',
+                                    '<br>',
+                                    '<sup>',
+                                    'Top 10 Florida Credit Unions',
+                                    '</sup>')))  
+asset_plotly
+```
+
+The one problem with the graph above is that there is a scale issue, Suncoast Credit Union is roughly 5 times larger than Addition, so the actual changes in asset size between the credit unions are lost. So what if we instead look at the Asset growth for each Credit Union between December 2019 and June 2021? This would give us an idea of how Coronavirus effected each Credit Union.
+
+```{r}
+growth_trend <- ggplot(data = top_ten_assets)+
+  geom_line(aes(x = Cycle_Date, y = AssetGrowth, color=CreditUnion), size=1)+
+  geom_line(aes(x = Cycle_Date, y = AssetGrowth, color=CreditUnion, text=paste("Credit Union: ",CreditUnion,"<br>Date:",Cycle_Date,"<br>Assets: $", format(Assets,big.mark=","),"<br>Growth: ",round(AssetGrowth*100,1),"%")), size=1)+
+  scale_y_continuous(labels=scales::percent_format())+
+  scale_x_date(date_breaks = "2 month", date_labels =  "%b %y")+
+  labs(y="Assets Growth (%)",x="Cycle Date", color="Credit Union",title=" ")
+  #theme(plot.title.position = "plot")
+```
+
+The graph below is the result of this question, we can see Fairwinds (which is ranked 5th overall) has seen the largest percentage growth in Assets over the pandemic, they have grown a full 41.5% in just a year and a half!
+
+```{r}
+growth_plotly <- ggplotly(growth_trend, tooltip = "text", width = 1000) %>%
+  layout(title = list(text = paste0('Asset Growth Since 2019',
+                                    '<br>',
+                                    '<sup>',
+                                    'Top 10 Florida Credit Unions',
+                                    '</sup>')))
+growth_plotly
+```
+
+# Using a Model
+
+### Trying to forecast the success of a potential branch
+
+For this portion of the Mini Project I wanted to see if we could forecast the success of a potential site as a branch for my employer. Since Credit Unions are not required to disclose the number of checking accounts assigned to each branch the branch addresses and names have been removed from the dataset, but the data used is accurate.
+
+The model I will use for this project is a linear regression, I have created a dataset which contains demographic data on every branch as well as the number of checking accounts the branch has and the age of the branch in months. In a prior project I left the dataset as that, but I learned in that project that alone was not enough and the model was inaccurate. This time around I also included historical data on the number of branches and age. So instead of just including 1 record for each of Midflorida's 62 branches I included as many as 120 for each branch, 1 record for each month since 2011. My hope is this will provide the model with enough information to distinguish branch age from the demographic data. There are many reasons this is necessary but the primary reason is I do not want the model to assume a branch has bad demographics just because it is new and I also wanted the model to understand the rate ay which a branch increases in size after it is opened.
+
+```{sql, connection=con, output.var = "Midflorida_Branches"}
+select *
+from ncua.dbo.Midflorida_Branches
+```
+
+We access this data through a sql query like before and we can see below a summary of the data.
+
+```{r}
+summary(Midflorida_Branches)
+```
+
+The first step is to run the regression and see if any metrics have a high P-Value.
+
+```{r}
+mfb_lm <- lm(Checking_Accounts ~ Months_Open + Employees + Establishments + Population + Med_HH_Income + Housing_Units + Occupied + Has_Mortgage + Bachelors_Degree + Med_Home_Value + Banks + Cus + Traffic + FDIC_Dep + Dep_per_FI + FairShare_Pop, data = Midflorida_Branches)
+```
+
+From the summary below we can see Employees and Establishments are not useful to this model and should be removed.
+
+```{r}
+summ(mfb_lm)
+```
+
+```{r}
+mfb_lm <- lm(Checking_Accounts ~ Months_Open + Population + Med_HH_Income + Housing_Units + Occupied + Has_Mortgage + Bachelors_Degree + Med_Home_Value + Banks + Cus + Traffic + FDIC_Dep + Dep_per_FI + FairShare_Pop, data = Midflorida_Branches)
+```
+
+After removing those metrics the R-Squared value is still only 0.42, this is not an optimistic outlook on the model, but trying to predict branch success is very difficult so I'll still continue for the sake of curisoity.
+
+```{r}
+summ(mfb_lm)
+```
+
+Below is a visualization showing the effects of each metric on the forecasted number of checking accounts. This visualization is extremely important as it allows us to see what metrics we should look for in a potential site. Metrics with positive coefficients are "good" for a branch where as negative are "bad". Some of these results make sense, "Months_Open" says the longer a branch has been opened the more checking accounts it has, which is logical. This is also true of Household Income, Population and Traffic. There is logic on the negative side as well, the model shows we want to have fewer nearby credit unions and banks. Where the model appears to be failing is with Housing Units and Fair Share Population. The model believes that a branch is successful when there are fewer housing units nearby, this is illogical, and is interesting because it is the opposite of the population effect we just discussed. The best thing I could think of is a wealthy area likely has larger homes and less apartments therefore the number of housing units would be lower, this would agree with the inverse correlation between housing units and household income. The most concerning find is the negative coefficent on Fair Share Population. This metric was made custom by me, it takes the population and divides it by the number of banks plus credit unions plus 1. The logic here being if the population was divided equally this would show how many customers the branch would get. The model is saying we want this figure to be lower, I have not been able to find a good explanation for this.
+
+```{r}
+plot_summs(mfb_lm, scale = TRUE, plot.distributions = TRUE, inner_ci_level = .9)
+```
+
+With the creation of the model out the way I wanted to plug in the demographics of a potential site and see how many checking accounts the model believes the branch could have when it turns 5 years old.
+
+```{r}
+coef <- summary(mfb_lm)$coefficients[,1]
+```
+
+```{r}
+potential_site <- c(1,60,101812,55984,45564,.954,.33,.234,45564,10,2,62500,1690440,130,7832)
+```
+
+```{r}
+sum(coef*potential_site)
+```
+
+The model is forecasting 5,650 checking accounts. This is good news and within the realm of possibility. We have had branches reach this number within 5 years although it is rare.
+
+The last step I wanted to take was to try and test the model by withholding a branch and seeing how close the model is to the real number. For this purpose I will exclude branch 19
+
+```{r}
+mfb_lm_test <- lm(Checking_Accounts ~ Months_Open + Population + Med_HH_Income + Housing_Units + Occupied + Has_Mortgage + Bachelors_Degree + Med_Home_Value + Banks + Cus + Traffic + FDIC_Dep + Dep_per_FI + FairShare_Pop, data = filter(Midflorida_Branches,Branch_ID!=19))
+```
+
+Now if we use the metrics from branch 19 within this new model we can determine how many checking accounts the model believes the branch had when it was 5 years old:
+
+```{r}
+br_19_60 <- Midflorida_Branches %>%
+  filter(Branch_ID==19,Months_Open==60)%>%
+  select(Months_Open, Population, Med_HH_Income, Housing_Units, Occupied, Has_Mortgage, Bachelors_Degree, Med_Home_Value, Banks, Cus, Traffic, FDIC_Dep, Dep_per_FI, FairShare_Pop)
+
+coef_test <- summary(mfb_lm_test)$coefficients[,1][2:15]
+
+sum(coef_test*br_19_60)+summary(mfb_lm_test)$coefficients[,1][1]
+```
+
+The model is estimating 4,910 checking accounts and in reality that branch had only 2,790, a 76% error.
+
+```{r}
+Midflorida_Branches %>%
+  filter(Branch_ID==19,Months_Open==60)%>%
+  select(Checking_Accounts)
+```
+
+This model clearly needs more work and there are a few ideas I have to improve upon it, for one the demographic data is static as of 2020, this is because I had trouble sourcing data from 2011 to 2020. But I also believe the inclusion of branches which are 40+ years old are skewing the results in favor of higher checking accounts. I decided to include them in hopes that the additional demographic data would be useful, but I was unable to source any checking account data prior to 2011 which would have made those branches more useful.
+
+While that last model didn't turn out nearly as useful as I had hoped, I still believe valuable insights were drawn in the spatial and interactive plot sections of this mini project, as well as in some portions of this model.
