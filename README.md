@@ -11,7 +11,7 @@ Location: `Mini-Project-1/`
 The intend of this project is to explore the operating efficiencies of credit unions around the United States. This will be done by looking at the size of credit unions and their operational expenses. Along the way we will experiment with concepts learned from the glamour of graphics presenation as well as new markdown techniques to make the paper more interesting to read and more formal in structure.
 
 <p><b>Sample Visualization:</b> Efficiency Ratio compared to Asset Size</p>
-<img src="https://github.com/jeffreyrdubois/DataViz_Final_Project/blob/main/Figures/Efficency_Ratio.png" width=75%>
+<img src="https://github.com/jeffreyrdubois/dataviz_final_project/blob/main/figures/Efficency_Ratio.png" width=75%>
 
 
 
@@ -21,7 +21,7 @@ The intend of this project is to explore the operating efficiencies of credit un
 The intend of this project is to explore spaital analytics as it pertains to Credit Union Branches as well as experiment in interactive plots for asset growth. This project also includes a regression for branch site selection.
 
 <p><b>Sample VisualizationL</b> Map of Credit Union Branches</p>
-<img src="https://github.com/jeffreyrdubois/DataViz_Final_Project/blob/main/Figures/Branch_Map.png" width=75%>
+<img src="https://github.com/jeffreyrdubois/dataviz_final_project/blob/main/Figures/Branch_Map.png" width=75%>
 
 
 
