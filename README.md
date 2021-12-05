@@ -1,6 +1,6 @@
 # Data Visualization and Reproducible Research
 
-> Jeffrey DuBois. 
+> @jeffreyrdubois
 
 Learn more about me in my [GitHub profile page](https://github.com/reiminer)
 
