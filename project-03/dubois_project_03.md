@@ -20,6 +20,11 @@ Using the dataset obtained from FSU's [Florida Climate Center](https://climatece
 
 ```r
 library(tidyverse)
+library(RColorBrewer)
+library(ggridges)
+library(tidytext)
+library(igraph)
+library(ggraph)
 weather_tpa <- read_csv("https://github.com/reisanar/datasets/raw/master/tpa_weather_16_17.csv")
 # random sample 
 sample_n(weather_tpa, 4)
@@ -29,68 +34,44 @@ sample_n(weather_tpa, 4)
 ## # A tibble: 4 x 6
 ##    year month   day precipitation max_temp min_temp
 ##   <dbl> <dbl> <dbl>         <dbl>    <dbl>    <dbl>
-## 1  2016     8     3          0          90       77
-## 2  2016     6    10          0.52       88       76
-## 3  2016     2    16          0.25       71       55
-## 4  2016     1    14          0.02       69       50
+## 1  2016     6    23             0       91       79
+## 2  2016     1    20             0       66       41
+## 3  2016    11    27             0       80       57
+## 4  2016     6    21             0       89       66
 ```
 
-See https://www.reisanar.com/slides/relationships-models#10 for a reminder on how to use this dataset with the `lubridate` package for dates and times.
+```r
+color_scale = c("#440D54","#482073","#433E85","#38598C","#2D708E","#25858E","#1E9B8A","#2CB07F","#51C56A","#85D54A","#C2DF23","#FDE725")
+```
 
+(a)
 
-(a) Recreate the plot below:
+<img src="dubois_project_03_files/figure-html/unnamed-chunk-2-1.png" width="80%" style="display: block; margin: auto;" />
 
-<img src="https://github.com/reisanar/figs/raw/master/tpa_max_temps_facet.png" width="80%" style="display: block; margin: auto;" />
+(b)
 
-Hint: the option `binwidth = 3` was used with the `geom_histogram()` function.
+<img src="dubois_project_03_files/figure-html/unnamed-chunk-3-1.png" width="80%" style="display: block; margin: auto;" />
 
-(b) Recreate the plot below:
+(c)
 
-<img src="https://github.com/reisanar/figs/raw/master/tpa_max_temps_density.png" width="80%" style="display: block; margin: auto;" />
+<img src="dubois_project_03_files/figure-html/unnamed-chunk-4-1.png" width="80%" style="display: block; margin: auto;" />
 
-Hint: check the `kernel` parameter of the `geom_density()` function, and use `bw = 0.5`.
+(d)
 
-(c) Recreate the chart below:
+<img src="dubois_project_03_files/figure-html/unnamed-chunk-5-1.png" width="80%" style="display: block; margin: auto;" />
 
-<img src="https://github.com/reisanar/figs/raw/master/tpa_max_temps_density_facet.png" width="80%" style="display: block; margin: auto;" />
+(e)
 
-Hint: default options for `geom_density()` were used. 
+<img src="dubois_project_03_files/figure-html/unnamed-chunk-6-1.png" width="80%" style="display: block; margin: auto;" />
 
-(d) Recreate the chart below:
+(f) 
 
-<img src="https://github.com/reisanar/figs/raw/master/tpa_max_temps_ridges.png" width="80%" style="display: block; margin: auto;" />
-
-Hint: default options for `geom_density()` were used. 
-
-(e) Recreate the plot below:
-
-<img src="https://github.com/reisanar/figs/raw/master/tpa_max_temps_ridges.png" width="80%" style="display: block; margin: auto;" />
-
-Hint: use the`ggridges` package, and the `geom_density_ridges()` function paying close attention to the `quantile_lines` and `quantiles` parameters.
-
-(f) Recreate the chart below:
-
-<img src="https://github.com/reisanar/figs/raw/master/tpa_max_temps_ridges_plasma.png" width="80%" style="display: block; margin: auto;" />
-
-Hint: this uses the `plasma` option (color scale) for the _viridis_ palette.
-
-
+<img src="dubois_project_03_files/figure-html/unnamed-chunk-7-1.png" width="80%" style="display: block; margin: auto;" />
 
 
 ## Part 2: Visualizing Text Data
 
-Review the set of slides (and additional resources linked in it) for visualizing text data: https://www.reisanar.com/slides/text-viz#1
+The visualization below shows the various combinations of words in the Florida Poly News 2020 file, with edge node being a word and the edges being times the words were used together as a bigram. The size of the edge shows the frequencies. "Covid 19" is the most common bigram as we would expect for any news source in 2020.
 
-Choose any dataset with text data, and create at least one visualization with it. For example, you can create a frequency count of most used bigrams, a sentiment analysis of the text data, a network visualization of terms commonly used together, and/or a visualization of a topic modeling approach to the problem of identifying words/documents associated to different topics in the text data you decide to use. 
+![](dubois_project_03_files/figure-html/unnamed-chunk-8-1.png)<!-- -->
 
-Make sure to include a copy of the dataset in the `data/` folder, and reference your sources if different from the ones listed below:
-
-- [Billboard Top 100 Lyrics](https://github.com/reisanar/datasets/blob/master/BB_top100_2015.csv)
-
-- [RateMyProfessors comments](https://github.com/reisanar/datasets/blob/master/rmp_wit_comments.csv)
-
-- [FL Poly News 2020](https://github.com/reisanar/datasets/blob/master/poly_news_FL20.csv)
-
-- [FL Poly News 2019](https://github.com/reisanar/datasets/blob/master/poly_news_FL19.csv)
-
-(to get the "raw" data from any of the links listed above, simply click on the `raw` button of the GitHub page and copy the URL to be able to read it in your computer using the `read_csv()` function)
