@@ -27,7 +27,7 @@ The intend of this project is to explore spaital analytics as it pertains to Cre
 
 ## Mini-Project 3
 
-This project was used as an opportunity to explore visualizations which had not been explored earlier in the semester, this was done using two datasets. The first was temperatures in Tampa, Florida in 2016 and 2017 provided by FSU's [Florida Climate Center](https://climatecenter.fsu.edu/climate-data-access-tools/downloadable-data). This dataset was used to create the visualization below. I also created a bigram network using records from the Fforida Poly 2020 news.
+This project was used as an opportunity to explore visualizations which had not been explored earlier in the semester, this was done using two datasets. The first was temperatures in Tampa, Florida in 2016 and 2017 provided by FSU's [Florida Climate Center](https://climatecenter.fsu.edu/climate-data-access-tools/downloadable-data). This dataset was used to create the visualization below. I also created a bigram network using records from the Florida Poly 2020 news.
 
 <p><b>Sample Visualization:</b> Tampa Temperature Ridgeplot</p>
 <img src="https://github.com/jeffreyrdubois/dataviz_final_project/blob/main/figures/temps.png" width=75%>
